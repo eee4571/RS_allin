@@ -1,0 +1,93 @@
+"""Plugin discovery, API compatibility checks, and command routing."""
+
+from __future__ import annotations
+
+import importlib
+import pkgutil
+from dataclasses import dataclass
+
+from core.event_bus import EventBus
+from core.models import Command, WorkflowDefinition
+from core.module_api import ProcessingModule
+from core.project_context import ProjectContext
+
+
+@dataclass(frozen=True, slots=True)
+class DisabledModule:
+    module_id: str
+    display_name: str
+    api_version: str
+    reason: str
+
+
+class ModuleRegistry:
+    SUPPORTED_API_VERSION = "1"
+
+    def __init__(self, event_bus: EventBus, project_context: ProjectContext) -> None:
+        self._event_bus = event_bus
+        self._project_context = project_context
+        self._modules: dict[str, ProcessingModule] = {}
+        self._disabled: list[DisabledModule] = []
+
+    def register(self, module: ProcessingModule) -> bool:
+        if module.api_version != self.SUPPORTED_API_VERSION:
+            self._disabled.append(
+                DisabledModule(
+                    module.module_id,
+                    module.display_name,
+                    module.api_version,
+                    f"接口版本不兼容：模块为 {module.api_version}，主程序支持 {self.SUPPORTED_API_VERSION}",
+                )
+            )
+            return False
+        if module.module_id in self._modules:
+            raise ValueError(f"模块 ID 重复：{module.module_id}")
+        module.set_project_context(self._project_context)
+        self._modules[module.module_id] = module
+        return True
+
+    def discover(self, package_name: str = "modules") -> list[str]:
+        """Discover packages exposing create_plugin(event_bus), safely isolating failures."""
+        errors: list[str] = []
+        package = importlib.import_module(package_name)
+        for item in pkgutil.iter_modules(package.__path__, f"{package_name}."):
+            if not item.ispkg:
+                continue
+            plugin_module_name = f"{item.name}.plugin"
+            try:
+                plugin_module = importlib.import_module(plugin_module_name)
+                factory = getattr(plugin_module, "create_plugin")
+                self.register(factory(self._event_bus))
+            except Exception as exc:  # one broken plugin must not break the shell
+                errors.append(f"{plugin_module_name}: {exc}")
+        return errors
+
+    def modules(self) -> tuple[ProcessingModule, ...]:
+        return tuple(self._modules.values())
+
+    def disabled_modules(self) -> tuple[DisabledModule, ...]:
+        return tuple(self._disabled)
+
+    def get(self, module_id: str) -> ProcessingModule:
+        try:
+            return self._modules[module_id]
+        except KeyError as exc:
+            raise KeyError(f"未找到可用模块：{module_id}") from exc
+
+    def workflow(self, module_id: str, workflow_id: str) -> WorkflowDefinition:
+        for workflow in self.get(module_id).workflows():
+            if workflow.id == workflow_id:
+                return workflow
+        raise KeyError(f"模块 {module_id} 中不存在工作流 {workflow_id}")
+
+    def all_workflows(self) -> tuple[tuple[ProcessingModule, WorkflowDefinition], ...]:
+        result = [
+            (module, workflow)
+            for module in self.modules()
+            for workflow in module.workflows()
+        ]
+        return tuple(sorted(result, key=lambda item: (item[1].category, item[1].order)))
+
+    def dispatch(self, command: Command) -> None:
+        self.get(command.module_id).handle_command(command)
+
