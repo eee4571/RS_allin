@@ -52,11 +52,11 @@ class MapView(QWidget):
         painter.drawText(self.rect().adjusted(0, 18, 0, 0), Qt.AlignCenter, "影像 · 道路 · 建筑物 · 变化成果")
 
         painter.setPen(Qt.NoPen)
+        palette = ("#22a06b", "#3b82f6", "#d97706", "#8b5cf6", "#0891b2")
         for index, layer in enumerate(self._layers[-5:]):
-            color = QColor("#22a06b") if "building" not in layer.layer_type else QColor("#3b82f6")
+            color = QColor(palette[sum(ord(char) for char in layer.layer_type) % len(palette)])
             painter.setBrush(color)
             painter.drawRoundedRect(18, 18 + index * 29, 10, 10, 3, 3)
             painter.setPen(QColor("#40545d"))
             painter.drawText(36, 28 + index * 29, layer.name)
             painter.setPen(Qt.NoPen)
-

@@ -7,7 +7,7 @@ import pkgutil
 from dataclasses import dataclass
 
 from core.event_bus import EventBus
-from core.models import Command, WorkflowDefinition
+from core.models import Command, ModuleDescriptor, WorkflowCapability, WorkflowDefinition
 from core.module_api import ProcessingModule
 from core.project_context import ProjectContext
 
@@ -27,6 +27,7 @@ class ModuleRegistry:
         self._event_bus = event_bus
         self._project_context = project_context
         self._modules: dict[str, ProcessingModule] = {}
+        self._descriptors: dict[str, ModuleDescriptor] = {}
         self._disabled: list[DisabledModule] = []
 
     def register(self, module: ProcessingModule) -> bool:
@@ -43,7 +44,11 @@ class ModuleRegistry:
         if module.module_id in self._modules:
             raise ValueError(f"模块 ID 重复：{module.module_id}")
         module.set_project_context(self._project_context)
+        descriptor = module.descriptor()
+        if descriptor.module_id != module.module_id:
+            raise ValueError(f"模块描述信息与实现不一致：{module.module_id}")
         self._modules[module.module_id] = module
+        self._descriptors[module.module_id] = descriptor
         return True
 
     def discover(self, package_name: str = "modules") -> list[str]:
@@ -65,6 +70,10 @@ class ModuleRegistry:
     def modules(self) -> tuple[ProcessingModule, ...]:
         return tuple(self._modules.values())
 
+    def descriptors(self) -> tuple[ModuleDescriptor, ...]:
+        """Return immutable metadata for platform presentation and reporting."""
+        return tuple(self._descriptors.values())
+
     def disabled_modules(self) -> tuple[DisabledModule, ...]:
         return tuple(self._disabled)
 
@@ -74,20 +83,25 @@ class ModuleRegistry:
         except KeyError as exc:
             raise KeyError(f"未找到可用模块：{module_id}") from exc
 
-    def workflow(self, module_id: str, workflow_id: str) -> WorkflowDefinition:
-        for workflow in self.get(module_id).workflows():
+    def capability(self, module_id: str, workflow_id: str) -> WorkflowCapability:
+        descriptor = self._descriptors.get(module_id)
+        if descriptor is None:
+            raise KeyError(f"未找到可用模块：{module_id}")
+        for workflow in descriptor.workflows:
             if workflow.id == workflow_id:
-                return workflow
+                return WorkflowCapability(descriptor, workflow)
         raise KeyError(f"模块 {module_id} 中不存在工作流 {workflow_id}")
 
-    def all_workflows(self) -> tuple[tuple[ProcessingModule, WorkflowDefinition], ...]:
+    def workflow(self, module_id: str, workflow_id: str) -> WorkflowDefinition:
+        return self.capability(module_id, workflow_id).workflow
+
+    def all_workflows(self) -> tuple[WorkflowCapability, ...]:
         result = [
-            (module, workflow)
-            for module in self.modules()
-            for workflow in module.workflows()
+            WorkflowCapability(descriptor, workflow)
+            for descriptor in self.descriptors()
+            for workflow in descriptor.workflows
         ]
-        return tuple(sorted(result, key=lambda item: (item[1].category, item[1].order)))
+        return tuple(sorted(result, key=lambda item: (item.workflow.category, item.workflow.order)))
 
     def dispatch(self, command: Command) -> None:
         self.get(command.module_id).handle_command(command)
-

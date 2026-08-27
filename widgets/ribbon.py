@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from collections import defaultdict
-
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
-    QFrame,
+    QButtonGroup,
     QHBoxLayout,
-    QLabel,
-    QScrollArea,
+    QSizePolicy,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -15,56 +12,60 @@ from PySide6.QtWidgets import (
 
 
 class Ribbon(QWidget):
-    workflow_selected = Signal(str, str)
+    """Top-level platform navigation, independent of business modules."""
 
-    def __init__(self, registry, parent=None):
+    module_selected = Signal(str)
+
+    MODULES = (
+        ("road_change_detection", "道路变化检测", "↔"),
+        ("building_change_detection", "建筑物变化检测", "▦"),
+        ("building_entity_extraction", "建筑实体提取及位移校正", "⌖"),
+        ("agent", "智能体", "✦"),
+    )
+
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ribbon")
+        self._buttons: dict[str, QToolButton] = {}
+        self._button_group = QButtonGroup(self)
+        self._button_group.setExclusive(True)
+
         root = QVBoxLayout(self)
         root.setContentsMargins(14, 8, 14, 8)
         root.setSpacing(4)
 
-        sections = QHBoxLayout()
-        sections.setSpacing(8)
-        grouped = defaultdict(list)
-        for module, workflow in registry.all_workflows():
-            grouped[workflow.category].append((module, workflow))
+        buttons = QHBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
+        buttons.setSpacing(8)
+        for module_id, name, icon in self.MODULES:
+            button = QToolButton()
+            button.setObjectName("ribbonButton")
+            button.setCheckable(True)
+            button.setText(f"{icon}\n{name}")
+            button.setToolTip(name)
+            button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            button.setMinimumWidth(150)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            button.clicked.connect(
+                lambda checked=False, value=module_id: self._select(value)
+            )
+            self._button_group.addButton(button)
+            self._buttons[module_id] = button
+            buttons.addWidget(button, 1)
 
-        for category, workflows in grouped.items():
-            section = QFrame()
-            section.setObjectName("ribbonSection")
-            section_layout = QVBoxLayout(section)
-            section_layout.setContentsMargins(8, 5, 8, 5)
-            buttons = QHBoxLayout()
-            buttons.setSpacing(4)
-            for module, workflow in workflows:
-                button = QToolButton()
-                button.setObjectName("ribbonButton")
-                button.setText(f"{workflow.icon}\n{workflow.name}")
-                button.setToolTip(f"{module.display_name} · v{module.module_version}\n{workflow.description}")
-                button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-                button.setMinimumWidth(96)
-                button.clicked.connect(
-                    lambda checked=False, m=module.module_id, w=workflow.id:
-                    self.workflow_selected.emit(m, w)
-                )
-                buttons.addWidget(button)
-            section_layout.addLayout(buttons)
-            label = QLabel(category)
-            label.setObjectName("ribbonCategory")
-            label.setAlignment(Qt.AlignCenter)
-            section_layout.addWidget(label)
-            sections.addWidget(section)
+        first_id = self.MODULES[0][0]
+        self._buttons[first_id].setChecked(True)
+        root.addLayout(buttons)
 
-        sections.addStretch(1)
-        holder = QWidget()
-        holder.setLayout(sections)
-        scroll = QScrollArea()
-        scroll.setObjectName("ribbonScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setWidget(holder)
-        root.addWidget(scroll)
+    @property
+    def selected_module_id(self) -> str:
+        for module_id, button in self._buttons.items():
+            if button.isChecked():
+                return module_id
+        return ""
 
+    def _select(self, module_id: str) -> None:
+        button = self._buttons[module_id]
+        with QSignalBlocker(button):
+            button.setChecked(True)
+        self.module_selected.emit(module_id)

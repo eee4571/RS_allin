@@ -52,6 +52,35 @@ class ResultTypeDefinition:
     geometry_type: str = "unknown"
 
 
+@dataclass(frozen=True, slots=True)
+class ModuleDescriptor:
+    """Immutable public metadata exposed by a registered module.
+
+    The platform may use this descriptor to present a module, but it never
+    needs the module implementation object itself.
+    """
+
+    module_id: str
+    display_name: str
+    module_version: str
+    api_version: str
+    workflows: tuple[WorkflowDefinition, ...] = ()
+    tools: tuple[ToolDefinition, ...] = ()
+    result_types: tuple[ResultTypeDefinition, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowCapability:
+    """A workflow capability together with its public module metadata."""
+
+    module: ModuleDescriptor
+    workflow: WorkflowDefinition
+
+    @property
+    def module_id(self) -> str:
+        return self.module.module_id
+
+
 @dataclass(slots=True)
 class Command:
     module_id: str
@@ -141,4 +170,3 @@ class WorkflowStateChanged:
     workflow_id: str
     state: str
     step_id: str = ""
-

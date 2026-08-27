@@ -9,6 +9,8 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+Windows 下也可以直接双击仓库根目录中的 `启动遥感平台.bat` 启动主页面。启动文件会自动定位仓库目录，并优先使用项目内或系统中的 `pythonw`，无需手动打开命令行。
+
 运行测试：
 
 ```powershell
@@ -27,14 +29,18 @@ styles/                     统一视觉样式
 tests/                      插件发现、兼容性隔离和依赖边界测试
 ```
 
-`ModuleRegistry.discover()` 自动扫描 `modules` 下提供 `create_plugin(event_bus)` 的插件包。主窗口只依赖 Registry、CommandBus、EventBus 和数据模型，不导入任何具体插件或 Adapter。
+`ModuleRegistry.discover()` 自动扫描 `modules` 下提供 `create_plugin(event_bus)` 的插件包。注册中心内部保留模块实现用于命令路由，同时生成不可变的 `ModuleDescriptor` 和 `WorkflowCapability` 供后续平台能力接入；当前主页面的 `Ribbon` 使用固定的四个一级模块入口，不读取具体插件实例，也不导入任何具体插件或 Adapter。
 
-## 一次按钮点击如何流转
+`WorkflowDefinition` 只描述一个可执行能力的名称、步骤、参数和可选展示提示。它不是主窗口布局定义：平台可以把同一能力放入 Ribbon、菜单、工具栏或其他入口，而无需修改业务模块。
+
+当前主页面只建立布局承载关系：顶部显示“道路变化检测”“建筑物变化检测”“建筑实体提取及位移校正”“智能体”四个入口；右侧 `ModulePanel` 保持为空，仅显示“选择功能模块后在此显示操作面板”占位文字。具体模块操作界面在后续通过 Platform Contract 接入。
+
+## 后续模块接入时的按钮流转
 
 ```text
 QPushButton（运行工作流）
         ↓
-WorkflowPanel 收集动态参数
+WorkflowPanel 根据 WorkflowCapability 收集动态参数
         ↓
 生成统一 Command
         ↓
@@ -97,4 +103,3 @@ modules/water/adapter.py
 `plugin.py` 实现 `ProcessingModule` 并导出 `create_plugin(event_bus)`。由于启动时自动发现插件，甚至无需维护硬编码注册清单；Registry 会完成注册、API v1 兼容性校验和命令路由。水体工作流会自动进入 Ribbon 和同一个 WorkflowPanel。
 
 如果插件声明的 `api_version` 不是 `1`，Registry 会将其记录为禁用模块，主程序继续启动，并在日志中显示当前版本和支持版本。
-

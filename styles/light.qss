@@ -15,7 +15,10 @@ QToolBar QToolButton:hover { background: #eaf3f0; }
 #ribbonSection { background: #ffffff; border-right: 1px solid #e1e7e9; }
 #ribbonButton { border: 1px solid transparent; border-radius: 6px; padding: 7px 8px; min-height: 48px; }
 #ribbonButton:hover { background: #eaf6f2; border-color: #b8dfd2; color: #087a55; }
+#ribbonButton:checked { background: #e8f5f0; border-bottom: 3px solid #1a9b70; color: #087a55; }
+#ribbonButton:checked:hover { background: #e1f2ec; }
 #ribbonCategory { color: #7b8b92; font-size: 11px; padding-top: 2px; }
+#modulePlaceholder { color: #a1adb2; font-size: 13px; }
 QDockWidget { color: #34474f; font-weight: 600; titlebar-close-icon: none; titlebar-normal-icon: none; }
 QDockWidget::title { background: #edf2f3; border: 1px solid #d5dfe2; padding: 7px 9px; text-align: left; }
 QDockWidget > QWidget { border: 1px solid #d5dfe2; }
@@ -52,4 +55,3 @@ QTabBar::tab:selected { background: #ffffff; color: #087a55; border-top: 2px sol
 QHeaderView::section { background: #edf2f3; border: 0; border-right: 1px solid #d6e0e3; padding: 5px; font-weight: 600; }
 QScrollBar:vertical { width: 10px; background: transparent; }
 QScrollBar::handle:vertical { background: #c4d0d4; border-radius: 5px; min-height: 25px; }
-
