@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from dataclasses import dataclass
+from typing import Any, Callable
 
 from core.event_bus import EventBus
 from core.models import Command, ModuleDescriptor, WorkflowCapability, WorkflowDefinition
@@ -29,6 +30,7 @@ class ModuleRegistry:
         self._modules: dict[str, ProcessingModule] = {}
         self._descriptors: dict[str, ModuleDescriptor] = {}
         self._disabled: list[DisabledModule] = []
+        self._operation_page_factories: dict[str, Callable[..., Any]] = {}
 
     def register(self, module: ProcessingModule) -> bool:
         if module.api_version != self.SUPPORTED_API_VERSION:
@@ -62,7 +64,13 @@ class ModuleRegistry:
             try:
                 plugin_module = importlib.import_module(plugin_module_name)
                 factory = getattr(plugin_module, "create_plugin")
-                self.register(factory(self._event_bus))
+                module = factory(self._event_bus)
+                if self.register(module):
+                    page_factory = getattr(
+                        plugin_module, "create_operation_page", None
+                    )
+                    if callable(page_factory):
+                        self._operation_page_factories[module.module_id] = page_factory
             except Exception as exc:  # one broken plugin must not break the shell
                 errors.append(f"{plugin_module_name}: {exc}")
         return errors
@@ -76,6 +84,10 @@ class ModuleRegistry:
 
     def disabled_modules(self) -> tuple[DisabledModule, ...]:
         return tuple(self._disabled)
+
+    def operation_page_factories(self) -> dict[str, Callable[..., Any]]:
+        """Return optional module-owned page factories as opaque extensions."""
+        return dict(self._operation_page_factories)
 
     def get(self, module_id: str) -> ProcessingModule:
         try:

@@ -81,11 +81,13 @@ class ArchitectureTests(unittest.TestCase):
         self.assertTrue(all(isinstance(item, WorkflowCapability) for item in capabilities))
         self.assertTrue(all(isinstance(item.module, ModuleDescriptor) for item in capabilities))
         self.assertFalse(hasattr(capabilities[0].module, "handle_command"))
-        self.assertEqual("road", self.registry.capability("road", "road_extraction").module_id)
+        self.assertEqual("road", self.registry.capability("road", "full_pipeline").module_id)
 
     def test_workflows_are_owned_by_plugins(self):
         road_ids = {workflow.id for workflow in self.registry.get("road").workflows()}
-        self.assertIn("road_timeseries", road_ids)
+        self.assertEqual(
+            {"full_pipeline", "rerun_period", "rerun_change_pair"}, road_ids
+        )
         self.assertEqual(
             {"building_extraction", "building_quantification"},
             {item.id for item in self.registry.get("building_extract").workflows()},
@@ -148,9 +150,17 @@ class ArchitectureTests(unittest.TestCase):
         self.assertTrue(all(button.icon().isNull() for button in ribbon._buttons.values()))
 
     def test_module_panel_switches_generic_descriptor_pages(self):
+        from modules.road.ui.road_panel import RoadPanel
+
         navigation = tuple((module_id, title) for module_id, title in Ribbon.MODULES)
-        panel = ModulePanel(navigation=navigation, descriptors=self.registry.descriptors())
+        panel = ModulePanel(
+            navigation=navigation,
+            descriptors=self.registry.descriptors(),
+            page_factories=self.registry.operation_page_factories(),
+            project_context=ProjectContext(),
+        )
         self.assertEqual("road", panel.current_module_id)
+        self.assertIsInstance(panel.stack.currentWidget(), RoadPanel)
         self.assertTrue(panel.show_module("building_change"))
         self.assertEqual("building_change", panel.current_module_id)
         page = panel.stack.currentWidget()
@@ -198,9 +208,9 @@ class ArchitectureTests(unittest.TestCase):
             self.assertEqual("✓ 就绪", window.status_text.text())
             window.ribbon._buttons["building_extract"].click()
             self.assertEqual("building_extract", window.module_panel.current_module_id)
-            window.log_panel.update_task("road", "road_extraction", "运行中", 0.5)
+            window.log_panel.update_task("road", "full_pipeline", "运行中", 0.5)
             self.assertEqual("道路变化检测", window.log_panel.tasks.item(0, 0).text())
-            self.assertEqual("道路提取", window.log_panel.tasks.item(0, 1).text())
+            self.assertEqual("完整道路处理", window.log_panel.tasks.item(0, 1).text())
             self.assertEqual(
                 ["文件(F)", "视图(V)", "数据(D)", "工具(T)", "窗口(W)", "帮助(H)"],
                 [menu.title().replace("&", "") for menu in window.menuBar().findChildren(type(window.view_menu))],

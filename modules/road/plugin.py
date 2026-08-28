@@ -12,74 +12,121 @@ from modules.road.adapter import RoadAdapter
 
 class RoadPlugin(ProcessingModule):
     module_id = "road"
-    display_name = "道路智能分析"
-    module_version = "0.1.0"
+    display_name = "道路变化检测"
+    module_version = "0.2.0"
     api_version = "1"
 
     def __init__(self, event_bus):
         self._adapter = RoadAdapter(event_bus)
 
     def workflows(self):
-        common = (
+        advanced = (
             Param("device", "计算设备", "choice", "CUDA", ("CUDA", "CPU")),
-            Param("output_dir", "成果目录", "directory", ""),
+            Param("change_threshold", "变化检测阈值", "float", 0.55),
+            Param("processing_mode", "处理模式", "choice", "标准", ("快速", "标准")),
+        )
+        full_steps = (
+            Step("check", "数据检查"),
+            Step("extract", "道路提取"),
+            Step("width", "道路宽度计算"),
+            Step("change", "相邻期变化检测"),
+            Step("update", "成果更新"),
         )
         return (
             Workflow(
-                "road_extraction", "道路提取", "RE", "从遥感影像生成道路中心线、路面与宽度成果。",
+                "full_pipeline",
+                "完整道路处理",
+                "",
+                "按区域和期次自动补算缺失成果，并更新相邻期道路变化。",
+                full_steps,
+                (
+                    Param("area_id", "区域", "string", ""),
+                    Param("periods", "处理期次", "string", "2022,2024"),
+                    *advanced,
+                ),
+                "道路处理",
+                10,
+            ),
+            Workflow(
+                "rerun_period",
+                "重跑指定期次",
+                "",
+                "重新生成一个期次的道路中心线、道路面与道路宽度成果。",
                 (
                     Step("check", "数据检查"),
-                    Step("centerline", "道路中心线提取"),
-                    Step("surface", "道路面提取"),
+                    Step("extract", "道路提取"),
                     Step("width", "道路宽度计算"),
-                    Step("export", "结果生成"),
+                    Step("update", "成果更新"),
                 ),
                 (
-                    Param("period", "影像期次", "choice", "2024", ("2022", "2024")),
-                    Param("mode", "处理模式", "choice", "Fast", ("Fast", "Full")),
-                    *common,
-                ), "目标提取", 10,
+                    Param("area_id", "区域", "string", ""),
+                    Param("period", "期次", "string", "2024"),
+                    Param("update_related", "更新相关成果", "boolean", True),
+                    *advanced,
+                ),
+                "道路处理",
+                20,
             ),
             Workflow(
-                "road_change", "道路变化检测", "RC", "识别两期影像间新增、消失与形态变化的道路。",
+                "rerun_change_pair",
+                "重跑指定变化对",
+                "",
+                "重新计算所选前后期之间的道路变化成果。",
                 (
-                    Step("periods", "选择前后期"), Step("detect", "变化检测"),
-                    Step("classify", "变化分类"), Step("export", "结果生成"),
+                    Step("check", "数据检查"),
+                    Step("change", "变化检测"),
+                    Step("update", "成果更新"),
                 ),
                 (
-                    Param("before", "前期", "choice", "2022", ("2020", "2022", "2024")),
-                    Param("after", "后期", "choice", "2024", ("2022", "2024", "2026")),
-                    Param("threshold", "变化阈值", "float", 0.55), *common,
-                ), "变化检测", 10,
-            ),
-            # This extra workflow demonstrates that editing only this plugin changes the shell.
-            Workflow(
-                "road_timeseries", "道路长时序分析", "RT", "分析多期道路网络的演化趋势。",
-                (
-                    Step("series", "时序数据检查"), Step("align", "跨期配准"),
-                    Step("trend", "趋势分析"), Step("export", "报告生成"),
+                    Param("area_id", "区域", "string", ""),
+                    Param("before", "前期", "string", "2022"),
+                    Param("after", "后期", "string", "2024"),
+                    Param("update_related", "更新相关成果", "boolean", True),
+                    *advanced,
                 ),
-                (
-                    Param("start_year", "起始年份", "integer", 2018),
-                    Param("end_year", "结束年份", "integer", 2024),
-                    Param("include_report", "生成统计报告", "boolean", True), *common,
-                ), "变化检测", 30,
+                "道路处理",
+                30,
             ),
         )
 
     def tools(self):
-        return (ToolDefinition("edit_feature", "道路人工编辑"),)
+        return (
+            ToolDefinition(
+                "update_after_edit",
+                "编辑后更新相关成果",
+                description="供未来平台统一地图编辑完成后触发；本轮不提供 UI。",
+            ),
+        )
 
     def result_types(self):
-        return (ResultTypeDefinition("road_vector", "道路矢量", "line/polygon"),)
+        return (
+            ResultTypeDefinition("road_centerline", "道路中心线", "line"),
+            ResultTypeDefinition("road_surface", "道路面", "polygon"),
+            ResultTypeDefinition("road_width", "道路宽度", "line"),
+            ResultTypeDefinition("road_change", "道路变化结果", "line/polygon"),
+        )
+
+    def set_project_context(self, context):
+        super().set_project_context(context)
+        self._adapter.set_project_context(context)
 
     def handle_command(self, command: Command):
+        workflows = {item.id: item for item in self.workflows()}
         if command.action == "run":
-            workflow = next(item for item in self.workflows() if item.id == command.workflow_id)
+            workflow = workflows.get(command.workflow_id)
+            if workflow is None:
+                raise ValueError(f"未知道路工作流：{command.workflow_id}")
             self._adapter.run(command, workflow)
-        else:
-            self._adapter.execute_tool(command)
+            return
+        self._adapter.handle_action(command)
 
 
 def create_plugin(event_bus):
     return RoadPlugin(event_bus)
+
+
+def create_operation_page(**kwargs):
+    """Lazy module-owned UI factory discovered without shell coupling."""
+    from modules.road.ui.road_panel import RoadPanel
+
+    return RoadPanel(**kwargs)

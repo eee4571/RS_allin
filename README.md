@@ -23,7 +23,10 @@ python -m unittest discover -s tests -v
 main.py / main_window.py    组装通用基础设施和展示层
 core/                       稳定的数据契约、总线、注册中心与共享上下文
 modules/*/plugin.py         模块能力、工作流、步骤、参数、工具、结果声明
-modules/*/adapter.py        原独立软件的适配边界（本轮为 Mock）
+modules/*/adapter.py        平台命令到模块任务的适配边界（本轮为 Mock）
+modules/road/contracts.py   可序列化 Road Job / Worker JSON-Lines 协议
+modules/road/runner.py      未来独立道路环境的进程启动边界
+modules/road/ui/            道路模块自有的专用操作页面
 widgets/                    完全由描述模型驱动的通用 Qt 控件
 styles/                     统一视觉样式
 tests/                      插件发现、兼容性隔离和依赖边界测试
@@ -33,7 +36,7 @@ tests/                      插件发现、兼容性隔离和依赖边界测试
 
 `WorkflowDefinition` 只描述一个可执行能力的名称、步骤、参数和可选展示提示。它不是主窗口布局定义：平台可以把同一能力放入 Ribbon、菜单、工具栏或其他入口，而无需修改业务模块。
 
-当前主页面使用统一的内部 ID（`road`、`building_change`、`building_extract`、`agent`）驱动四个顶部入口。点击入口会切换右侧 `ModulePanel` 的对应页面；已注册模块的工作流、参数和步骤由公开描述动态生成，未注册模块显示平台预留页。页面只依赖 Platform Contract，不接触具体 Plugin 或 Adapter。
+当前主页面使用统一的内部 ID（`road`、`building_change`、`building_extract`、`agent`）驱动四个顶部入口。点击入口会切换右侧 `ModulePanel` 的对应页面。平台默认根据公开描述生成通用页面；模块也可以在插件入口导出可选的 `create_operation_page` 工厂。道路模块使用自有 `RoadPanel`，建筑模块继续使用通用页面，未注册模块显示平台预留页。
 
 布局采用“左侧统一项目/图层树 + 中央地图上下文栏与地图画布 + 右侧模块操作/日志任务纵向分栏”。项目树支持区域、原始数据、时相、成果和公共数据等通用层级；图层 checkbox 通过展示层信号控制进入地图画布的可见图层集合。
 
@@ -44,7 +47,7 @@ tests/                      插件发现、兼容性隔离和依赖边界测试
         ↓
 右侧 ModulePanel 承载对应模块界面
         ↓
-模块界面根据 WorkflowCapability 收集动态参数
+通用页面或模块自有页面表达用户意图
         ↓
 生成统一 Command
         ↓
@@ -56,10 +59,10 @@ ModuleRegistry.dispatch()
         ↓
 Plugin.handle_command()
         ↓
-对应 Adapter（当前为 TimedMockAdapter）
+对应 Adapter
 ```
 
-当前右侧 `ModulePanel` 会根据 `ModuleDescriptor` 和 `WorkflowDefinition` 生成通用参数、步骤与运行按钮。页面不会调用 `road.run()`，也不需要让主窗口知道插件类名；运行和工具动作统一转换为 `Command`。
+`ModulePanel` 不判断具体模块。它优先使用 Registry 提供的可选页面工厂，没有工厂时继续根据 `ModuleDescriptor` 和 `WorkflowDefinition` 生成通用参数、步骤与运行按钮。页面不会调用 Adapter 或算法，运行和工具动作统一转换为 `Command`。
 
 ## 模块进度如何回到界面
 
@@ -79,10 +82,17 @@ Adapter 和 Plugin 都没有主窗口引用，也不会操作 Qt 控件。结果
 
 ## Road 模块以后更新
 
+道路模块当前提供 `full_pipeline`、`rerun_period` 和 `rerun_change_pair` 三个稳定工作流。`RoadPanel` 只让用户选择区域、期次和少量高级参数；项目路径、输入清单与输出位置由 `ProjectContext` 提供。`RoadAdapter` 已不再继承 `TimedMockAdapter`，而是把 Command 转换成可写入 `job.json` 的 `RoadJob`，再把 Mock/Worker 事件映射回平台 Task、Result 与 Layer 事件。
+
+真实算法接入时，主要实现 `RoadProcessRunner.start_job()`（例如使用 `QProcess` 启动独立 Python 环境）并替换 `RoadAdapter.run_mock_job()` 的调用路径。独立 Worker 按 JSON Lines 输出 `started/progress/log/result/completed/error`，无需获得 Qt 或 `ProjectContext` 对象。
+
 修改道路内部流程时，只改：
 
 - `modules/road/plugin.py`：增加、删除或调整 Workflow、Step、Parameter、Tool、ResultType；
 - `modules/road/adapter.py`：接入或升级原道路软件的调用方式；
+- `modules/road/contracts.py`：在兼容前提下演进 Job 与 Worker 协议；
+- `modules/road/runner.py`：配置并启动独立道路环境；
+- `modules/road/ui/`：仅在道路业务交互本身变化时调整；
 - 道路模块自己的内部算法文件（未来新增）。
 
 完全不需要修改：

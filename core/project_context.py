@@ -16,4 +16,5 @@ class ProjectContext:
     areas: dict[str, Any] = field(default_factory=dict)
     layers: list[Any] = field(default_factory=list)
     results: dict[str, Any] = field(default_factory=dict)
-
+    inputs: dict[str, Any] = field(default_factory=dict)
+    output_root: str = ""

@@ -22,7 +22,14 @@ class ModulePanel(QWidget):
 
     command_requested = Signal(object)
 
-    def __init__(self, parent=None, navigation=(), descriptors=()):
+    def __init__(
+        self,
+        parent=None,
+        navigation=(),
+        descriptors=(),
+        page_factories=None,
+        project_context=None,
+    ):
         super().__init__(parent)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -30,10 +37,21 @@ class ModulePanel(QWidget):
         self.stack = QStackedWidget()
         self.stack.setObjectName("moduleStack")
         root.addWidget(self.stack)
-        self._pages: dict[str, ModuleOperationPage] = {}
+        self._pages: dict[str, QWidget] = {}
         descriptor_by_id = {item.module_id: item for item in descriptors}
+        page_factories = dict(page_factories or {})
         for module_id, title in navigation:
-            page = ModuleOperationPage(module_id, title, descriptor_by_id.get(module_id))
+            descriptor = descriptor_by_id.get(module_id)
+            page_factory = page_factories.get(module_id)
+            if page_factory is None:
+                page = ModuleOperationPage(module_id, title, descriptor)
+            else:
+                page = page_factory(
+                    module_id=module_id,
+                    title=title,
+                    descriptor=descriptor,
+                    project_context=project_context,
+                )
             page.command_requested.connect(self.command_requested.emit)
             self._pages[module_id] = page
             self.stack.addWidget(page)

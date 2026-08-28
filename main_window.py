@@ -89,7 +89,12 @@ class MainWindow(QMainWindow):
 
         descriptors = self.registry.descriptors()
         navigation = tuple((module_id, title) for module_id, title in Ribbon.MODULES)
-        self.module_panel = ModulePanel(navigation=navigation, descriptors=descriptors)
+        self.module_panel = ModulePanel(
+            navigation=navigation,
+            descriptors=descriptors,
+            page_factories=self.registry.operation_page_factories(),
+            project_context=self.context,
+        )
         module_names = {
             descriptor.module_id: descriptor.display_name for descriptor in descriptors
         }
