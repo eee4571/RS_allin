@@ -1,0 +1,6 @@
+# The delivery ZIP may include these, but Git should not track bundled environments or weights.
+runtime/env/*
+runtime/models/*
+!runtime/env/.gitkeep
+!runtime/models/.gitkeep
+

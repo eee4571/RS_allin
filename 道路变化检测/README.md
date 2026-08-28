@@ -1,5 +1,72 @@
 # SAMRoad 一键道路变化检测（独立用户项目）
 
+## 插件方式使用
+
+仓库根目录现提供一个自包含的 PySide6 Dock 插件层。插件 UI 进程只依赖
+PySide6，不会导入 torch、GDAL、rasterio、OpenCV、SAM 或道路算法模块；实际
+计算由 `plugin/runner.py` 使用 `QProcess` 启动
+`runtime/env/samroad_env/python.exe code/user_pipeline.py`，因此宿主程序与道路
+算法环境可以独立升级。
+
+独立调试：
+
+```powershell
+cd 道路变化检测
+python standalone.py
+```
+
+宿主 PySide6 程序嵌入：
+
+```python
+from plugin import create_plugin
+
+road_plugin = create_plugin()
+road_widget = road_plugin.create_widget(parent)
+host_layout.addWidget(road_widget)
+
+# 整个宿主退出时调用；仅隐藏 Dock 不需要 shutdown。
+road_plugin.shutdown()
+```
+
+宿主可以完全忽略集成信号；插件面板自身已经能够选择输入、扫描区域和期次、
+选择输出目录、运行、显示进度和日志、取消任务以及执行局部重跑。需要与宿主
+联动时可选择监听以下普通 Python 数据信号：
+
+```python
+road_plugin.task_progress.connect(on_progress)  # dict
+road_plugin.task_log.connect(on_log)            # str
+road_plugin.task_finished.connect(on_finished)  # dict
+road_plugin.task_failed.connect(on_failed)      # str
+road_plugin.result_ready.connect(on_result)     # dict
+```
+
+`result_ready` 只从正式 `成果输出/result_index.json` 转换，不扫描工作目录猜测
+结果。单期成果会给出 `area_id`、`period`、`type`、`path`；变化成果会给出
+`area_id`、`before_period`、`after_period`、`type`、`path`。类型覆盖中心线、
+道路面、宽度段、道路走廊、变化分层、长时序成果、评价和任务报告。
+
+插件默认定位以下相对路径，整个 `道路变化检测/` 文件夹可以整体移动：
+
+```text
+runtime/env/samroad_env/python.exe
+runtime/models/samroad/samroad.ckpt
+runtime/models/sam_molra/adapter.th
+runtime/config/samroad_inference.yaml
+code/user_pipeline.py
+```
+
+完整流程调用真实 `all` 子命令，并显式映射标准/快速模式为
+`--execution-profile full/fast`，设备映射为 `auto/cuda/cpu`。若输出对应的
+`_work/tasks/latest_pipeline.json` 与当前模式一致，插件会带原 `run_id` 和
+`--resume` 交由现有后端完成续跑、成果复用与输入失效重算。局部期次和变化对
+分别调用现有 `rerun-period`、`rerun-change`，普通用户无需选择 manifest。
+
+交付时复制整个目录，并包含 `plugin/`、`code/`、`runtime/env/`、
+`runtime/models/`、`runtime/config/`、`standalone.py`、`plugin.json` 和本说明。
+独立环境和模型权重体积较大，正式交付 ZIP 需要包含，但 Git 仓库默认通过本
+目录 `.gitignore` 排除 `runtime/env/*` 与 `runtime/models/*`；仅配置和空目录
+占位文件进入版本控制。
+
 本目录可单独运行和迁移。运行时只使用本目录内部的代码、模型、配置、环境和输出，不访问父目录，也不包含模型训练功能。
 
 顶层目录按职责分开：
