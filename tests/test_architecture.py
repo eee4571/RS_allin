@@ -6,13 +6,15 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QPushButton, QToolButton
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QComboBox, QSplitter
 
 from core.event_bus import EventBus
 from core.command_bus import CommandBus
 from core import module_registry as module_registry_impl
 from core.models import (
     Command,
+    LayerAdded,
     ModuleDescriptor,
     TaskFailed,
     WorkflowCapability,
@@ -23,6 +25,7 @@ from core.module_api import ProcessingModule
 from core.module_registry import ModuleRegistry
 from core.project_context import ProjectContext
 from widgets.ribbon import Ribbon
+from widgets.project_panel import ProjectPanel
 from widgets.workflow_panel import ModulePanel
 
 
@@ -130,20 +133,55 @@ class ArchitectureTests(unittest.TestCase):
         ribbon = Ribbon()
         self.assertEqual(
             ["道路变化检测", "建筑物变化检测", "建筑实体提取及位移校正", "智能体"],
-            [name for _, name, _ in ribbon.MODULES],
+            [name for _, name in ribbon.MODULES],
         )
-        self.assertEqual("road_change_detection", ribbon.selected_module_id)
+        self.assertEqual(
+            ["road", "building_change", "building_extract", "agent"],
+            [module_id for module_id, _ in ribbon.MODULES],
+        )
+        self.assertEqual("road", ribbon.selected_module_id)
         emitted = []
         ribbon.module_selected.connect(emitted.append)
         ribbon._buttons["agent"].click()
         self.assertEqual(["agent"], emitted)
         self.assertEqual("agent", ribbon.selected_module_id)
+        self.assertTrue(all(button.icon().isNull() for button in ribbon._buttons.values()))
 
-    def test_module_panel_is_empty_host(self):
-        panel = ModulePanel()
-        self.assertEqual("选择功能模块后在此显示操作面板", panel.placeholder.text())
-        self.assertEqual([], panel.findChildren(QPushButton))
-        self.assertEqual([], panel.findChildren(QToolButton))
+    def test_module_panel_switches_generic_descriptor_pages(self):
+        navigation = tuple((module_id, title) for module_id, title in Ribbon.MODULES)
+        panel = ModulePanel(navigation=navigation, descriptors=self.registry.descriptors())
+        self.assertEqual("road", panel.current_module_id)
+        self.assertTrue(panel.show_module("building_change"))
+        self.assertEqual("building_change", panel.current_module_id)
+        page = panel.stack.currentWidget()
+        self.assertIsInstance(page.workflow_selector, QComboBox)
+        self.assertEqual("building_change", page.workflow_selector.currentData())
+        commands = []
+        panel.command_requested.connect(commands.append)
+        page.run_button.click()
+        self.assertEqual(("building_change", "building_change"), (
+            commands[0].module_id, commands[0].workflow_id
+        ))
+        self.assertTrue(panel.show_module("agent"))
+        self.assertFalse(hasattr(panel.stack.currentWidget(), "workflow_selector"))
+
+    def test_project_tree_has_area_structure_and_controls_visibility(self):
+        context = ProjectContext(areas={"a": {"name": "区域 A"}})
+        panel = ProjectPanel(context)
+        layer = LayerAdded(
+            "road", "layer-1", "道路成果", "vector", {"area_id": "a", "group": "道路"}
+        )
+        visible = []
+        panel.visible_layers_changed.connect(visible.append)
+        panel.set_layers((layer,))
+        project = panel.tree.topLevelItem(0)
+        area = project.child(0)
+        self.assertEqual("区域 A", area.text(0))
+        self.assertEqual(["原始数据", "成果"], [area.child(i).text(0) for i in range(2)])
+        layer_item = area.child(1).child(0).child(0)
+        self.assertEqual("layer-1", layer_item.data(0, panel.LAYER_ID_ROLE))
+        layer_item.setCheckState(0, Qt.Unchecked)
+        self.assertEqual((), visible[-1])
 
     def test_main_window_keeps_platform_layout_skeleton(self):
         from main import create_application
@@ -151,9 +189,18 @@ class ArchitectureTests(unittest.TestCase):
         app, window = create_application([])
         try:
             self.assertIs(window.centralWidget(), window.map_view)
-            self.assertEqual("功能面板", window.module_dock.windowTitle())
-            self.assertTrue(window.log_dock.isHidden())
+            self.assertEqual("模块操作与任务", window.module_dock.windowTitle())
+            self.assertIsInstance(window.right_splitter, QSplitter)
+            self.assertIs(window.right_splitter.widget(0), window.module_panel)
+            self.assertIs(window.right_splitter.widget(1), window.log_panel)
+            self.assertIs(window.map_view.context_bar.parent(), window.map_view)
+            self.assertFalse(window.module_dock.isHidden())
             self.assertEqual("✓ 就绪", window.status_text.text())
+            window.ribbon._buttons["building_extract"].click()
+            self.assertEqual("building_extract", window.module_panel.current_module_id)
+            window.log_panel.update_task("road", "road_extraction", "运行中", 0.5)
+            self.assertEqual("道路变化检测", window.log_panel.tasks.item(0, 0).text())
+            self.assertEqual("道路提取", window.log_panel.tasks.item(0, 1).text())
             self.assertEqual(
                 ["文件(F)", "视图(V)", "数据(D)", "工具(T)", "窗口(W)", "帮助(H)"],
                 [menu.title().replace("&", "") for menu in window.menuBar().findChildren(type(window.view_menu))],
@@ -161,6 +208,12 @@ class ArchitectureTests(unittest.TestCase):
         finally:
             window.close()
             app.processEvents()
+
+    def test_map_canvas_does_not_paint_layer_labels(self):
+        root = Path(__file__).parents[1]
+        source = (root / "widgets" / "map_view.py").read_text(encoding="utf-8")
+        self.assertNotIn("layer.name", source)
+        self.assertNotIn("drawRoundedRect", source)
 
     def test_broken_plugin_isolated_during_discovery(self):
         good = SimpleNamespace(create_plugin=lambda event_bus: RecordingModule())

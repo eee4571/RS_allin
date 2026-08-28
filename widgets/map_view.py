@@ -23,14 +23,18 @@ class MapView(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addWidget(MapContextBar())
-        root.addWidget(MapToolBar())
+        self.context_bar = MapContextBar()
+        root.addWidget(self.context_bar)
         self.canvas = MapCanvas()
         self.map_canvas = self.canvas
         root.addWidget(self.canvas, 1)
 
     def set_layers(self, layers):
         self.canvas.set_layers(layers)
+
+    def zoom_to_layer(self, layer_id: str) -> None:
+        """Stable placeholder for a future GIS canvas implementation."""
+        self.canvas.setProperty("requestedLayerId", layer_id)
 
 
 class MapContextBar(QFrame):
@@ -58,34 +62,12 @@ class MapContextBar(QFrame):
         layout.addWidget(self.after_period)
         layout.addStretch(1)
 
-        for text, tooltip in (("⌖", "定位"), ("▣", "截图"), ("⋮", "更多")):
+        for text, tooltip in (("全图", "缩放至全图"), ("框选", "框选要素"), ("刷新", "刷新地图")):
             button = QToolButton()
             button.setObjectName("mapToolButton")
             button.setText(text)
             button.setToolTip(tooltip)
             layout.addWidget(button)
-
-
-class MapToolBar(QFrame):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("mapToolBar")
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 3, 8, 3)
-        layout.setSpacing(2)
-        tools = (
-            ("↶", "撤销"), ("↷", "重做"), ("✋", "平移"), ("□", "框选"),
-            ("＋", "缩放"), ("⌁", "测量"), ("⌖", "定位"), ("A", "文字"),
-            ("▣", "图层"), ("▤", "打印"),
-        )
-        for text, tooltip in tools:
-            button = QToolButton()
-            button.setObjectName("mapToolButton")
-            button.setText(text)
-            button.setToolTip(tooltip)
-            button.setAutoRaise(True)
-            layout.addWidget(button)
-        layout.addStretch(1)
 
 
 class MapCanvas(QWidget):
@@ -132,13 +114,3 @@ class MapCanvas(QWidget):
         painter.setFont(font)
         painter.setPen(QColor("#7b8794"))
         painter.drawText(self.rect().adjusted(0, 18, 0, 0), Qt.AlignCenter, "等待地图数据")
-
-        palette = ("#2563eb", "#64748b", "#d97706", "#8b5cf6", "#0891b2")
-        painter.setPen(Qt.NoPen)
-        for index, layer in enumerate(self._layers[-5:]):
-            color = QColor(palette[sum(ord(char) for char in layer.layer_type) % len(palette)])
-            painter.setBrush(color)
-            painter.drawRoundedRect(18, 18 + index * 29, 10, 10, 3, 3)
-            painter.setPen(QColor("#52606d"))
-            painter.drawText(36, 28 + index * 29, layer.name)
-            painter.setPen(Qt.NoPen)

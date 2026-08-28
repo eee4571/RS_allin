@@ -33,7 +33,9 @@ tests/                      插件发现、兼容性隔离和依赖边界测试
 
 `WorkflowDefinition` 只描述一个可执行能力的名称、步骤、参数和可选展示提示。它不是主窗口布局定义：平台可以把同一能力放入 Ribbon、菜单、工具栏或其他入口，而无需修改业务模块。
 
-当前主页面只建立布局承载关系：顶部显示“道路变化检测”“建筑物变化检测”“建筑实体提取及位移校正”“智能体”四个入口；右侧 `ModulePanel` 保持为空，仅显示“选择功能模块后在此显示操作面板”占位文字。具体模块操作界面在后续通过 Platform Contract 接入。
+当前主页面使用统一的内部 ID（`road`、`building_change`、`building_extract`、`agent`）驱动四个顶部入口。点击入口会切换右侧 `ModulePanel` 的对应页面；已注册模块的工作流、参数和步骤由公开描述动态生成，未注册模块显示平台预留页。页面只依赖 Platform Contract，不接触具体 Plugin 或 Adapter。
+
+布局采用“左侧统一项目/图层树 + 中央地图上下文栏与地图画布 + 右侧模块操作/日志任务纵向分栏”。项目树支持区域、原始数据、时相、成果和公共数据等通用层级；图层 checkbox 通过展示层信号控制进入地图画布的可见图层集合。
 
 ## 后续模块接入时的按钮流转
 
@@ -57,7 +59,7 @@ Plugin.handle_command()
 对应 Adapter（当前为 TimedMockAdapter）
 ```
 
-当前右侧 `ModulePanel` 只保留占位区域，不生成业务参数或运行按钮。未来模块界面不调用 `road.run()`，也不需要让主窗口知道插件类名；工具动作同样应转成统一 `Command(action="...")`。
+当前右侧 `ModulePanel` 会根据 `ModuleDescriptor` 和 `WorkflowDefinition` 生成通用参数、步骤与运行按钮。页面不会调用 `road.run()`，也不需要让主窗口知道插件类名；运行和工具动作统一转换为 `Command`。
 
 ## 模块进度如何回到界面
 

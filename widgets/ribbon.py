@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from PySide6.QtCore import QSignalBlocker, QSize, Qt, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
     QSizePolicy,
     QToolButton,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -20,10 +16,10 @@ class Ribbon(QWidget):
     module_selected = Signal(str)
 
     MODULES = (
-        ("road_change_detection", "道路变化检测", "road_change.svg"),
-        ("building_change_detection", "建筑物变化检测", "building_change.svg"),
-        ("building_entity_extraction", "建筑实体提取及位移校正", "building_extract.svg"),
-        ("agent", "智能体", "agent.svg"),
+        ("road", "道路变化检测"),
+        ("building_change", "建筑物变化检测"),
+        ("building_extract", "建筑实体提取及位移校正"),
+        ("agent", "智能体"),
     )
 
     def __init__(self, parent=None):
@@ -33,35 +29,31 @@ class Ribbon(QWidget):
         self._button_group = QButtonGroup(self)
         self._button_group.setExclusive(True)
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(14, 8, 14, 8)
-        root.setSpacing(4)
-
-        buttons = QHBoxLayout()
-        buttons.setContentsMargins(0, 0, 0, 0)
-        buttons.setSpacing(8)
-        for module_id, name, icon in self.MODULES:
+        buttons = QHBoxLayout(self)
+        buttons.setContentsMargins(12, 0, 12, 0)
+        buttons.setSpacing(2)
+        for module_id, name in self.MODULES:
             button = QToolButton()
             button.setObjectName("ribbonButton")
             button.setCheckable(True)
             button.setText(name)
             button.setToolTip(name)
-            button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-            icon_path = Path(__file__).resolve().parents[1] / "assets" / "icons" / icon
-            button.setIcon(QIcon(str(icon_path)))
-            button.setIconSize(QSize(20, 20))
-            button.setMinimumWidth(150)
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
             button.clicked.connect(
                 lambda checked=False, value=module_id: self._select(value)
             )
             self._button_group.addButton(button)
             self._buttons[module_id] = button
-            buttons.addWidget(button, 1)
+            buttons.addWidget(button)
 
         first_id = self.MODULES[0][0]
         self._buttons[first_id].setChecked(True)
-        root.addLayout(buttons)
+        buttons.addStretch(1)
+
+    @classmethod
+    def labels(cls) -> dict[str, str]:
+        return {module_id: name for module_id, name in cls.MODULES}
 
     @property
     def selected_module_id(self) -> str:
