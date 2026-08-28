@@ -2,34 +2,116 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class MapView(QWidget):
-    """Neutral shared map workspace placeholder for future GIS integration."""
+    """Map workspace shell with replaceable context bar, tools, and canvas."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("mapView")
         self.setMinimumSize(520, 360)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(MapContextBar())
+        root.addWidget(MapToolBar())
+        self.canvas = MapCanvas()
+        self.map_canvas = self.canvas
+        root.addWidget(self.canvas, 1)
+
+    def set_layers(self, layers):
+        self.canvas.set_layers(layers)
+
+
+class MapContextBar(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("mapContextBar")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 7, 12, 7)
+        layout.setSpacing(8)
+
+        current_label = QLabel("当前区域：")
+        self.region_value = QLabel("未选择")
+        self.region_value.setObjectName("mapContextValue")
+        layout.addWidget(current_label)
+        layout.addWidget(self.region_value)
+        layout.addSpacing(24)
+
+        layout.addWidget(QLabel("时相对比："))
+        self.before_period = QLabel("—")
+        self.after_period = QLabel("—")
+        self.before_period.setObjectName("periodBadge")
+        self.after_period.setObjectName("periodBadge")
+        layout.addWidget(self.before_period)
+        layout.addWidget(QLabel("────●────"))
+        layout.addWidget(self.after_period)
+        layout.addStretch(1)
+
+        for text, tooltip in (("⌖", "定位"), ("▣", "截图"), ("⋮", "更多")):
+            button = QToolButton()
+            button.setObjectName("mapToolButton")
+            button.setText(text)
+            button.setToolTip(tooltip)
+            layout.addWidget(button)
+
+
+class MapToolBar(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("mapToolBar")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 3, 8, 3)
+        layout.setSpacing(2)
+        tools = (
+            ("↶", "撤销"), ("↷", "重做"), ("✋", "平移"), ("□", "框选"),
+            ("＋", "缩放"), ("⌁", "测量"), ("⌖", "定位"), ("A", "文字"),
+            ("▣", "图层"), ("▤", "打印"),
+        )
+        for text, tooltip in tools:
+            button = QToolButton()
+            button.setObjectName("mapToolButton")
+            button.setText(text)
+            button.setToolTip(tooltip)
+            button.setAutoRaise(True)
+            layout.addWidget(button)
+        layout.addStretch(1)
+
+
+class MapCanvas(QWidget):
+    """Placeholder canvas; a GIS canvas can replace this class later."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("mapCanvas")
         self._layers = ()
 
     def set_layers(self, layers):
-        self._layers = layers
+        self._layers = tuple(layers)
         self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(self.rect(), QColor("#f3f6f7"))
-        painter.setPen(QPen(QColor("#dce4e7"), 1))
+        painter.fillRect(self.rect(), QColor("#eef1f5"))
+        painter.setPen(QPen(QColor("#d8dee7"), 1))
         spacing = 42
         for x in range(0, self.width(), spacing):
             painter.drawLine(x, 0, x, self.height())
         for y in range(0, self.height(), spacing):
             painter.drawLine(0, y, self.width(), y)
 
-        painter.setPen(QPen(QColor("#c5d0d4"), 3))
+        painter.setPen(QPen(QColor("#b9c3d0"), 3))
         for offset in (0, 90, 180):
             path = QPainterPath(QPointF(-30, self.height() * 0.28 + offset))
             path.cubicTo(
@@ -39,7 +121,7 @@ class MapView(QWidget):
             )
             painter.drawPath(path)
 
-        painter.setPen(QColor("#24343b"))
+        painter.setPen(QColor("#45515e"))
         font = painter.font()
         font.setPointSize(16)
         font.setBold(True)
@@ -48,15 +130,15 @@ class MapView(QWidget):
         font.setPointSize(10)
         font.setBold(False)
         painter.setFont(font)
-        painter.setPen(QColor("#6b7d85"))
-        painter.drawText(self.rect().adjusted(0, 18, 0, 0), Qt.AlignCenter, "影像 · 道路 · 建筑物 · 变化成果")
+        painter.setPen(QColor("#7b8794"))
+        painter.drawText(self.rect().adjusted(0, 18, 0, 0), Qt.AlignCenter, "等待地图数据")
 
+        palette = ("#2563eb", "#64748b", "#d97706", "#8b5cf6", "#0891b2")
         painter.setPen(Qt.NoPen)
-        palette = ("#22a06b", "#3b82f6", "#d97706", "#8b5cf6", "#0891b2")
         for index, layer in enumerate(self._layers[-5:]):
             color = QColor(palette[sum(ord(char) for char in layer.layer_type) % len(palette)])
             painter.setBrush(color)
             painter.drawRoundedRect(18, 18 + index * 29, 10, 10, 3, 3)
-            painter.setPen(QColor("#40545d"))
+            painter.setPen(QColor("#52606d"))
             painter.drawText(36, 28 + index * 29, layer.name)
             painter.setPen(Qt.NoPen)

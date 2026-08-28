@@ -8,9 +8,8 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QProgressBar,
+    QSizePolicy,
     QToolBar,
-    QVBoxLayout,
-    QWidget,
 )
 
 from widgets.log_panel import LogPanel
@@ -35,23 +34,33 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1080, 680)
         self._build_menu()
         self._build_workspace()
+        self._build_view_menu()
         self._connect_events()
         self._report_plugins()
 
     def _build_menu(self):
-        project_menu = self.menuBar().addMenu("项目")
+        file_menu = self.menuBar().addMenu("文件(&F)")
         new_action = QAction("新建工程", self)
         new_action.setShortcut(QKeySequence.New)
         new_action.triggered.connect(lambda: self.statusBar().showMessage("原型：新建工程", 2500))
         open_action = QAction("打开工程", self)
         open_action.setShortcut(QKeySequence.Open)
         open_action.triggered.connect(lambda: self.statusBar().showMessage("原型：打开工程", 2500))
-        project_menu.addActions((new_action, open_action))
-        view_menu = self.menuBar().addMenu("视图")
+        exit_action = QAction("退出", self)
+        exit_action.setShortcut(QKeySequence.Quit)
+        exit_action.triggered.connect(self.close)
+        file_menu.addActions((new_action, open_action))
+        file_menu.addSeparator()
+        file_menu.addAction(exit_action)
+
+        self.view_menu = self.menuBar().addMenu("视图(&V)")
         reset_action = QAction("恢复默认布局", self)
         reset_action.triggered.connect(self._restore_layout)
-        view_menu.addAction(reset_action)
-        help_menu = self.menuBar().addMenu("帮助")
+        self.view_menu.addAction(reset_action)
+        self.menuBar().addMenu("数据(&D)")
+        self.menuBar().addMenu("工具(&T)")
+        self.menuBar().addMenu("窗口(&W)")
+        help_menu = self.menuBar().addMenu("帮助(&H)")
         about_action = QAction("关于", self)
         about_action.triggered.connect(
             lambda: QMessageBox.about(
@@ -60,41 +69,61 @@ class MainWindow(QMainWindow):
         )
         help_menu.addAction(about_action)
 
-        toolbar = QToolBar("项目工具")
-        toolbar.setObjectName("projectToolbar")
-        toolbar.setMovable(False)
-        toolbar.addActions((new_action, open_action))
-        self.addToolBar(toolbar)
-
     def _build_workspace(self):
-        central = QWidget()
-        central_layout = QVBoxLayout(central)
-        central_layout.setContentsMargins(0, 0, 0, 0)
-        central_layout.setSpacing(0)
         self.ribbon = Ribbon()
+        self.ribbon.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.module_toolbar = QToolBar("模块导航")
+        self.module_toolbar.setObjectName("moduleToolbar")
+        self.module_toolbar.setMovable(False)
+        self.module_toolbar.setFloatable(False)
+        self.module_toolbar.addWidget(self.ribbon)
+        self.addToolBar(Qt.TopToolBarArea, self.module_toolbar)
+
         self.map_view = MapView()
-        central_layout.addWidget(self.ribbon)
-        central_layout.addWidget(self.map_view, 1)
-        self.setCentralWidget(central)
+        self.setCentralWidget(self.map_view)
 
         self.project_panel = ProjectPanel(self.context)
         self.project_dock = self._dock("项目与图层", self.project_panel, Qt.LeftDockWidgetArea)
         self.project_dock.setMinimumWidth(230)
         self.module_panel = ModulePanel()
-        self.module_dock = self._dock("模块功能", self.module_panel, Qt.RightDockWidgetArea)
+        self.module_dock = self._dock("功能面板", self.module_panel, Qt.RightDockWidgetArea)
         self.module_dock.setMinimumWidth(330)
         self.log_panel = LogPanel()
         self.log_dock = self._dock("日志与任务", self.log_panel, Qt.BottomDockWidgetArea)
         self.log_dock.setMinimumHeight(170)
+        self.log_dock.hide()
 
-        self.status_text = QLabel("就绪")
+        self.status_text = QLabel("✓ 就绪")
+        self.status_project = QLabel(f"项目：{self.context.project_name or '—'}")
+        self.status_area = QLabel("区域：—")
+        self.status_period = QLabel("期次：—")
+        self.status_crs = QLabel("坐标系：—")
+        self.status_coordinate = QLabel("坐标：—")
+        self.status_scale = QLabel("比例尺：—")
+        self.task_progress_label = QLabel("任务进度")
         self.progress = QProgressBar()
-        self.progress.setFixedWidth(190)
+        self.progress.setFixedWidth(145)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setTextVisible(True)
-        self.statusBar().addWidget(self.status_text, 1)
+        self.statusBar().addWidget(self.status_text)
+        self.statusBar().addWidget(self.status_project, 1)
+        for label in (
+            self.status_area,
+            self.status_period,
+            self.status_crs,
+            self.status_coordinate,
+            self.status_scale,
+            self.task_progress_label,
+        ):
+            self.statusBar().addWidget(label)
         self.statusBar().addPermanentWidget(self.progress)
+
+    def _build_view_menu(self):
+        self.view_menu.addSeparator()
+        self.view_menu.addAction(self.project_dock.toggleViewAction())
+        self.view_menu.addAction(self.module_dock.toggleViewAction())
+        self.view_menu.addAction(self.log_dock.toggleViewAction())
 
     def _dock(self, title, widget, area):
         dock = QDockWidget(title, self)
@@ -119,7 +148,7 @@ class MainWindow(QMainWindow):
 
     def _on_module_selected(self, module_id):
         labels = dict((item[0], item[1]) for item in Ribbon.MODULES)
-        self.status_text.setText("已选择：" + labels[module_id])
+        self.status_text.setText("✓ 已选择：" + labels[module_id])
 
     def _on_started(self, event):
         self.progress.setValue(0)
@@ -161,5 +190,6 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.project_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.module_dock)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.log_dock)
-        for dock in (self.project_dock, self.module_dock, self.log_dock):
-            dock.show()
+        self.project_dock.show()
+        self.module_dock.show()
+        self.log_dock.hide()

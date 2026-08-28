@@ -38,9 +38,11 @@ tests/                      插件发现、兼容性隔离和依赖边界测试
 ## 后续模块接入时的按钮流转
 
 ```text
-QPushButton（运行工作流）
+顶部模块入口
         ↓
-WorkflowPanel 根据 WorkflowCapability 收集动态参数
+右侧 ModulePanel 承载对应模块界面
+        ↓
+模块界面根据 WorkflowCapability 收集动态参数
         ↓
 生成统一 Command
         ↓
@@ -55,7 +57,7 @@ Plugin.handle_command()
 对应 Adapter（当前为 TimedMockAdapter）
 ```
 
-`WorkflowPanel` 不调用 `road.run()`，也不知道道路插件的类名。工具按钮同样转成 `Command(action="edit_feature")` 等统一命令。
+当前右侧 `ModulePanel` 只保留占位区域，不生成业务参数或运行按钮。未来模块界面不调用 `road.run()`，也不需要让主窗口知道插件类名；工具动作同样应转成统一 `Command(action="...")`。
 
 ## 模块进度如何回到界面
 
@@ -68,7 +70,7 @@ EventBus（QObject + Signal）
         ↓
 MainWindow 的通用状态槽
         ↓
-状态栏 / 进度条 / WorkflowPanel / LogPanel
+状态栏 / 进度条 / LogPanel
 ```
 
 Adapter 和 Plugin 都没有主窗口引用，也不会操作 Qt 控件。结果通过 `ResultAvailable` 和 `LayerAdded` 事件进入共享 `LayerManager`，再同步到项目树和地图空间。
@@ -88,7 +90,7 @@ Adapter 和 Plugin 都没有主窗口引用，也不会操作 Qt 控件。结果
 - `widgets/workflow_panel.py`；
 - `widgets/parameter_panel.py`。
 
-当前 `RoadPlugin` 已仅靠自己的描述新增“道路长时序分析”，顶部功能区和右侧工作流会在重启后自动出现，作为这一扩展能力的演示。
+当前四个顶部模块入口与具体插件能力解耦；未来模块界面可以通过 Platform Contract 接入右侧承载区。
 
 ## 增加第四个模块（例如水体提取）
 
@@ -100,6 +102,6 @@ modules/water/plugin.py
 modules/water/adapter.py
 ```
 
-`plugin.py` 实现 `ProcessingModule` 并导出 `create_plugin(event_bus)`。由于启动时自动发现插件，甚至无需维护硬编码注册清单；Registry 会完成注册、API v1 兼容性校验和命令路由。水体工作流会自动进入 Ribbon 和同一个 WorkflowPanel。
+`plugin.py` 实现 `ProcessingModule` 并导出 `create_plugin(event_bus)`。由于启动时自动发现插件，甚至无需维护硬编码注册清单；Registry 会完成注册、API v1 兼容性校验和命令路由。具体能力接入 UI 时，应通过稳定契约进入右侧 `ModulePanel`。
 
 如果插件声明的 `api_version` 不是 `1`，Registry 会将其记录为禁用模块，主程序继续启动，并在日志中显示当前版本和支持版本。

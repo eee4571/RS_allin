@@ -145,6 +145,23 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual([], panel.findChildren(QPushButton))
         self.assertEqual([], panel.findChildren(QToolButton))
 
+    def test_main_window_keeps_platform_layout_skeleton(self):
+        from main import create_application
+
+        app, window = create_application([])
+        try:
+            self.assertIs(window.centralWidget(), window.map_view)
+            self.assertEqual("功能面板", window.module_dock.windowTitle())
+            self.assertTrue(window.log_dock.isHidden())
+            self.assertEqual("✓ 就绪", window.status_text.text())
+            self.assertEqual(
+                ["文件(F)", "视图(V)", "数据(D)", "工具(T)", "窗口(W)", "帮助(H)"],
+                [menu.title().replace("&", "") for menu in window.menuBar().findChildren(type(window.view_menu))],
+            )
+        finally:
+            window.close()
+            app.processEvents()
+
     def test_broken_plugin_isolated_during_discovery(self):
         good = SimpleNamespace(create_plugin=lambda event_bus: RecordingModule())
         package = SimpleNamespace(__path__=[])

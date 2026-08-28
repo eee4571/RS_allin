@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from pathlib import Path
+
+from PySide6.QtCore import QSignalBlocker, QSize, Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
@@ -17,10 +20,10 @@ class Ribbon(QWidget):
     module_selected = Signal(str)
 
     MODULES = (
-        ("road_change_detection", "道路变化检测", "↔"),
-        ("building_change_detection", "建筑物变化检测", "▦"),
-        ("building_entity_extraction", "建筑实体提取及位移校正", "⌖"),
-        ("agent", "智能体", "✦"),
+        ("road_change_detection", "道路变化检测", "road_change.svg"),
+        ("building_change_detection", "建筑物变化检测", "building_change.svg"),
+        ("building_entity_extraction", "建筑实体提取及位移校正", "building_extract.svg"),
+        ("agent", "智能体", "agent.svg"),
     )
 
     def __init__(self, parent=None):
@@ -41,9 +44,12 @@ class Ribbon(QWidget):
             button = QToolButton()
             button.setObjectName("ribbonButton")
             button.setCheckable(True)
-            button.setText(f"{icon}\n{name}")
+            button.setText(name)
             button.setToolTip(name)
-            button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            icon_path = Path(__file__).resolve().parents[1] / "assets" / "icons" / icon
+            button.setIcon(QIcon(str(icon_path)))
+            button.setIconSize(QSize(20, 20))
             button.setMinimumWidth(150)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             button.clicked.connect(
