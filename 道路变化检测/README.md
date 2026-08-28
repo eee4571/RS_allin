@@ -15,6 +15,12 @@ cd 道路变化检测
 python standalone.py
 ```
 
+Windows 用户也可以直接双击 `启动道路变化检测插件.bat`，无需手动输入命令。
+启动文件会依次检查插件目录、RS_allin 仓库目录下的 `.venv`/`venv`/`env`
+以及 PATH 中的全部 Python，自动选择第一个可以导入 PySide6 的界面环境，并在
+没有可用环境时显示原因。`runtime/env/samroad_env` 是独立道路算法环境，不要求
+也不应为了插件界面额外安装 PySide6。
+
 宿主 PySide6 程序嵌入：
 
 ```python
